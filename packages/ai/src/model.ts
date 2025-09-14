@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { FeatureVector, AIModelState } from '@pkg/shared';
-import { normalizeFeatures } from './features.js';
+import { normalizeFeatures } from './features';
 
 export class AIModel {
   private weights: number[] = [];

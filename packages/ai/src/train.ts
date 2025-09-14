@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Database } from '@pkg/data';
-import { AIModel } from './model.js';
-import { extractTrainingFeatures } from './features.js';
+import { AIModel } from './model';
+import { extractTrainingFeatures } from './features';
 import { logger } from '@pkg/shared';
 
 async function main() {
