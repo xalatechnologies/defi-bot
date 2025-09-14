@@ -1,5 +1,5 @@
-import { UniswapV2Connector } from './uniswap-v2.js';
-import { POLYGON_ADDRESSES } from './constants.js';
+import { UniswapV2Connector } from './uniswap-v2';
+import { POLYGON_ADDRESSES } from './constants';
 import type { Pair } from '@pkg/shared';
 
 export class PolygonConnectors {

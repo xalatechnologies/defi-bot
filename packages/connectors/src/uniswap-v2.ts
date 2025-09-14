@@ -6,7 +6,7 @@ import {
   UNISWAP_V2_ROUTER_ABI, 
   UNISWAP_V2_FACTORY_ABI,
   TOKEN_DECIMALS 
-} from './constants.js';
+} from './constants';
 
 export interface DEXConfig {
   factory: string;
@@ -136,7 +136,7 @@ export class UniswapV2Connector {
     
     const path = [tokenIn, tokenOut];
     
-    return await routerWithSigner.swapExactTokensForTokens(
+    return await (routerWithSigner as any).swapExactTokensForTokens(
       amountIn,
       amountOutMin,
       path,

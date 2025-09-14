@@ -1,3 +1,3 @@
-export * from './gas.js';
-export * from './math.js';
-export * from './profit.js';
+export * from './gas';
+export * from './math';
+export * from './profit';

@@ -1,3 +1,3 @@
-export * from './constants.js';
-export * from './polygon.js';
-export * from './uniswap-v2.js';
+export * from './constants';
+export * from './polygon';
+export * from './uniswap-v2';
