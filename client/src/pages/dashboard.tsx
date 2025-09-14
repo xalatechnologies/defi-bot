@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,27 +39,29 @@ export default function Dashboard() {
   const { lastMessage, connectionStatus } = useWebSocket("/ws");
 
   // Handle WebSocket messages
-  if (lastMessage) {
-    try {
-      const message = JSON.parse(lastMessage.data);
-      if (message.type === "kill_switch_activated") {
-        setKillSwitchActive(true);
-        toast({
-          title: "Kill Switch Activated",
-          description: message.data.reason,
-          variant: "destructive",
-        });
-      } else if (message.type === "kill_switch_reset") {
-        setKillSwitchActive(false);
-        toast({
-          title: "Kill Switch Reset",
-          description: "Bot is ready to resume trading",
-        });
+  useEffect(() => {
+    if (lastMessage) {
+      try {
+        const message = JSON.parse(lastMessage.data);
+        if (message.type === "kill_switch_activated") {
+          setKillSwitchActive(true);
+          toast({
+            title: "Kill Switch Activated",
+            description: message.data.reason,
+            variant: "destructive",
+          });
+        } else if (message.type === "kill_switch_reset") {
+          setKillSwitchActive(false);
+          toast({
+            title: "Kill Switch Reset",
+            description: "Bot is ready to resume trading",
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
       }
-    } catch (error) {
-      console.error("Error parsing WebSocket message:", error);
     }
-  }
+  }, [lastMessage, toast]);
 
   const handleKillSwitch = async () => {
     try {

@@ -22,7 +22,20 @@ export function TradesTable() {
   const [filter, setFilter] = useState("all");
   
   const { data: trades, isLoading, refetch } = useQuery({
-    queryKey: ["/api/trades", { filter: filter !== "all" ? filter : undefined, limit: 50 }],
+    queryKey: ["/api/trades", filter, 50],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('limit', '50');
+      if (filter !== "all") {
+        params.set('filter', filter);
+      }
+      const url = `/api/trades?${params.toString()}`;
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
