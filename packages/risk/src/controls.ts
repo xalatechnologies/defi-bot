@@ -1,6 +1,13 @@
 import type { Config, Trade } from '@pkg/shared';
 import type { Database } from '@pkg/data';
-import { logger } from '@pkg/shared';
+
+// Simple logger for risk management
+const logger = {
+  info: (msg: string, data?: any) => console.log(`[RISK INFO] ${msg}`, data || ''),
+  warn: (msg: string, data?: any) => console.warn(`[RISK WARN] ${msg}`, data || ''),
+  error: (msg: string, data?: any) => console.error(`[RISK ERROR] ${msg}`, data || ''),
+  debug: (msg: string, data?: any) => console.debug(`[RISK DEBUG] ${msg}`, data || '')
+};
 
 export interface RiskLimits {
   maxDailyLossUsd: number;
@@ -69,7 +76,7 @@ export class RiskManager {
         consecutiveLosses: this.state.consecutiveLosses
       });
     } catch (error) {
-      logger.error('Failed to initialize risk state', { error: error.message });
+      logger.error('Failed to initialize risk state', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -184,11 +191,15 @@ export class RiskManager {
 
     // Log risk event if needed
     if (this.state.consecutiveLosses >= 3) {
-      await this.database.recordRiskEvent(
-        'consecutive_losses',
-        `${this.state.consecutiveLosses} consecutive losses recorded`,
-        { consecutiveLosses: this.state.consecutiveLosses, lastTrade: trade }
-      );
+      try {
+        await this.database.recordRiskEvent(
+          'consecutive_losses',
+          `${this.state.consecutiveLosses} consecutive losses recorded`,
+          { consecutiveLosses: this.state.consecutiveLosses, lastTrade: trade }
+        );
+      } catch (error) {
+        logger.error('Failed to record consecutive loss event', { error: error instanceof Error ? error.message : 'Unknown error' });
+      }
     }
 
     logger.debug('Trade recorded in risk manager', {
@@ -205,11 +216,15 @@ export class RiskManager {
     this.state.isKilled = true;
     this.state.killReason = reason;
     
-    await this.database.recordRiskEvent('kill_switch', reason, {
-      dailyPnl: this.state.dailyPnl,
-      consecutiveLosses: this.state.consecutiveLosses,
-      timestamp: new Date().toISOString()
-    });
+    try {
+      await this.database.recordRiskEvent('kill_switch', reason, {
+        dailyPnl: this.state.dailyPnl,
+        consecutiveLosses: this.state.consecutiveLosses,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Failed to record kill switch event', { error: error instanceof Error ? error.message : 'Unknown error' });
+    }
 
     logger.error('KILL SWITCH ACTIVATED', { reason });
   }
@@ -221,7 +236,11 @@ export class RiskManager {
     this.state.isKilled = false;
     this.state.killReason = null;
     
-    await this.database.recordRiskEvent('kill_switch_reset', 'Kill switch manually reset');
+    try {
+      await this.database.recordRiskEvent('kill_switch_reset', 'Kill switch manually reset');
+    } catch (error) {
+      logger.error('Failed to record kill switch reset event', { error: error instanceof Error ? error.message : 'Unknown error' });
+    }
     logger.info('Kill switch reset');
   }
 
@@ -263,7 +282,7 @@ export class RiskManager {
       const stats = await this.database.getDailyStats();
       this.state.dailyPnl = stats.dailyPnl;
     } catch (error) {
-      logger.error('Failed to update daily PnL', { error: error.message });
+      logger.error('Failed to update daily PnL', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -278,7 +297,7 @@ export class RiskManager {
       
       this.state.tradesInLastHour = tradesInLastHour;
     } catch (error) {
-      logger.error('Failed to update trade count', { error: error.message });
+      logger.error('Failed to update trade count', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
