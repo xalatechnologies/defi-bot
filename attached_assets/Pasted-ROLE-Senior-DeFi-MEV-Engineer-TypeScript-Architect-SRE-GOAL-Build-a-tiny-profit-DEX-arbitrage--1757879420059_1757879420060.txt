@@ -1,0 +1,270 @@
+ROLE: Senior DeFi/MEV Engineer + TypeScript Architect + SRE
+GOAL: Build a tiny-profit DEX arbitrage bot with AI-assisted signal filtering, using my MetaMask wallet (exported private key via .env), subscribing to real-time on-chain data (WebSocket), supporting paper trading + live trading, with risk controls, backtests, and a minimal web dashboard. Chain: Polygon (default). DEXes: QuickSwap (UniV2) and Sushi (UniV2) first, easily extensible.
+
+1) Tech & Quality Bar
+
+Language: TypeScript (strict). Runtime: Node 20+.
+
+Packages: ethers@6, viem, zod, dotenv, pino, commander, ws, express, wss, sqlite3 (or better-sqlite3), node-cron, jest, ts-jest, tsx.
+
+AI: Start lightweight: in-process logistic regression / gradient boosted rules via simple TS module (no GPU), optional OpenAI fallback behind a toggle.
+
+No hardcoded secrets. All config via .env.
+
+Safety: never log private keys; add kill-switch; per-day loss caps; min profit after fees.
+
+DX: pnpm workspace; prettier, eslint, tests (≥ 85% on core math), typed configs, clean logs.
+
+2) Repo Layout
+/ (workspace)
+  apps/
+    worker/               # main bot (scanner + simulator + executor)
+    web/                  # minimal dashboard (Express + HTMX) for status/controls
+  packages/
+    core/                 # math: mid-price, slippage, fees, profit calc, gas estimator
+    connectors/           # on-chain readers & swap executors (UniV2 QuickSwap, Sushi)
+    data/                 # WS subscriptions, polling, local cache (SQLite)
+    ai/                   # tiny model: feature extraction + logistic classifier
+    risk/                 # kill switch, loss caps, cool-downs, trade sizing
+    shared/               # types, zod schemas, config loader
+  infra/
+    scripts/              # seed pairs, sanity checks, smoke tests
+  .env.example
+  pnpm-workspace.yaml
+  README.md
+
+3) Environment (.env.example)
+NODE_ENV=development
+CHAIN=polygon
+RPC_HTTP=https://polygon-rpc.com
+RPC_WS=wss://polygon-rpc.com/ws
+# export a DEDICATED MetaMask account's private key (never your main):
+WALLET_PRIVATE_KEY=0xYOUR_PRIVATE_KEY
+# optional premium RPCs
+ALCHEMY_HTTP=
+ALCHEMY_WS=
+INFURA_HTTP=
+INFURA_WS=
+
+MIN_PROFIT_USD=0.50
+MAX_DAILY_LOSS_USD=50
+MAX_NOTIONAL_USD=200
+SLIPPAGE_BPS=25
+GAS_PRICE_MULTIPLIER=1.10
+MODE=paper   # 'paper' or 'live'
+PORT=8080     # dashboard
+USE_OPENAI=false
+OPENAI_API_KEY=
+
+4) Features & Requirements
+
+Core
+
+Subscribe via WS to pool reserves for pairs (USDC/WETH, WETH/WMATIC, USDT/WETH, etc.) on QuickSwap and Sushi (UniV2 factories).
+
+On each reserve change or timed tick, compute mid-prices, identify spreads, simulate A→B→A trades including LP fee, slippage, gas, and nonce costs.
+
+Profit check: expectedProfitUSD − gasUSD − slippagePenaltyUSD ≥ MIN_PROFIT_USD.
+
+AI filter (tiny): features = spread bps, depth, recent volatility, trade size tier, mempool gas trend; output p(win). Only pass if p ≥ 0.7 (configurable).
+
+Risk controls: MAX_DAILY_LOSS_USD, MAX_NOTIONAL_USD, cool-down after a loss, kill-switch toggled from dashboard.
+
+Modes:
+
+paper: record simulated fills only.
+
+live: sign & send tx with ethers using WALLET_PRIVATE_KEY.
+
+Persistence: SQLite for trades, PnL, parameters, feature snapshots.
+
+DEX Connectors (UniV2)
+
+Read reserves via pair contract (getReserves), derive price.
+
+Build swaps via router (swapExactTokensForTokens) OFF-CHAIN for simulation; estimate gas.
+
+Approvals handled once per token per router (in live mode).
+
+Default routers: QuickSwap & Sushi on Polygon (include addresses & ABIs).
+
+Execution
+
+Single-tx A→B→A path using UniV2 routers (two hops).
+
+Pre-flight: check latest reserves again, compare with sim; abort if drift > X bps.
+
+Set deadline (now + 30s) and slippage from env.
+
+Send with eth_maxPriorityFeePerGas estimation; retry up to 2 times with backoff; no infinite retries.
+
+AI Module (packages/ai)
+
+extractFeatures(snapshot, path, sizeTier) -> FeatureVector
+
+score(features) -> pWin using a simple logistic regression (weights persisted in JSON).
+
+bin/train.ts trains/upgrades weights on recorded (paper/live) results nightly (cron).
+
+If USE_OPENAI=true, allow an aux signal for tie-breakers (very low frequency, memoized).
+
+Dashboard (apps/web)
+
+Endpoint / shows: PnL (day/week), win rate, last 50 trades, current mode, chain, toggles.
+
+Controls: switch paper/live, set min profit, slippage bps, enable/disable routes, kill-switch.
+
+Endpoint /api/health, /api/params, /api/kill, /api/mode, /api/retrain.
+
+Use Express + HTMX for simplicity (no heavy frontend).
+
+CLI (worker)
+
+pnpm worker start → run bot (subscribe, simulate, trade).
+
+pnpm worker backtest --from 2025-01-01 --to 2025-01-07 → replay cached snapshots.
+
+pnpm worker paper / pnpm worker live → set mode.
+
+pnpm ai train → retrain tiny model from SQLite.
+
+5) Contracts & Addresses (Polygon)
+
+No custom contracts required for MVP; use UniV2 routers (QuickSwap/Sushi).
+
+Include constants file with factory, router, init code hash, common token addresses (WMATIC, WETH, USDC, USDT).
+
+Provide pair discovery by hashing (UniV2) and/or a static allowlist to start.
+
+6) Implementation Tasks (generate code)
+
+Workspace & Tooling
+
+Init pnpm workspaces, TS strict, ESLint, Prettier, tsx, jest.
+
+Add pino logger (pretty in dev).
+
+packages/shared
+
+Types: Trade, Route, Pair, Snapshot, Params, Mode.
+
+Config loader (zod-validated) reading .env.
+
+packages/connectors (UniV2)
+
+polygon.ts with router/factory/pairs for QuickSwap/Sushi.
+
+getPairAddress(tokenA, tokenB) + readReserves(pair) (WS + HTTP fallback).
+
+Swap simulators: simulateV2ExactIn(amountIn, path, feeBps).
+
+packages/core
+
+Math utils: midPrice, priceFromReserves, spreadBps, slippageCalc, gasUSD estimator.
+
+Profit calculator: netProfitUSD(sim, params).
+
+packages/data
+
+WS subscriber to watch Sync events on pairs.
+
+Local cache in SQLite; snapshot pruning; simple metrics.
+
+packages/ai
+
+features.ts (build vector).
+
+model.ts (logistic regression with saved weights JSON).
+
+train.ts to fit weights from history; save to /packages/ai/model.json.
+
+packages/risk
+
+Track day PnL, enforce caps, cool-downs, kill-switch, route allowlist.
+
+apps/worker
+
+Main loop: on snapshot tick → enumerate routes/sizes → simulate → AI score → risk gate → if MODE=live, execute via router; else record paper trade.
+
+Tx sender: ethers@6 signer from WALLET_PRIVATE_KEY.
+
+Approvals manager.
+
+Retry policy & final logging.
+
+apps/web
+
+Express server + HTMX views.
+
+Endpoints to view stats and change params.
+
+Auth: simple token from .env (e.g., DASHBOARD_TOKEN) for POST changes.
+
+infra/scripts
+
+seed-pairs.ts populate common pairs.
+
+smoke.ts ensure RPC/WS connectivity, read one reserve, estimate gas.
+
+Testing
+
+Unit tests for math, AI score monotonicity (more spread → higher p).
+
+Integration: mock reserves → expected profitable trade triggers in paper mode.
+
+Backtest harness: load snapshots, compute PnL.
+
+7) Commands (package.json scripts)
+
+At workspace root:
+
+{
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "worker": "pnpm --filter @app/worker start",
+    "web": "pnpm --filter @app/web start",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "ai:train": "pnpm --filter @pkg/ai train",
+    "backtest": "pnpm --filter @app/worker backtest"
+  }
+}
+
+8) Acceptance Criteria
+
+Paper mode: when a spread ≥ MIN_PROFIT_USD after fees & gas, bot records a paper trade with positive net PnL.
+
+Live mode: bot executes a single UniV2 A→B→A route; final balances show net profit ≥ MIN_PROFIT_USD.
+
+Risk: if cumulative day PnL ≤ -MAX_DAILY_LOSS_USD, bot halts until next UTC day.
+
+Dashboard: shows PnL, last trades, current params; kill-switch and mode toggles work.
+
+9) Notes (MetaMask & Security)
+
+I will export a dedicated MetaMask account’s private key and place it in .env as WALLET_PRIVATE_KEY. Do not commit .env.
+
+Add .gitignore for .env, sqlite db files, logs.
+
+Never print secrets; redact addresses in logs except last 6 chars.
+
+10) Stretch (optional if time permits)
+
+Add Arbitrum chain toggle with Sushi + Camelot.
+
+Add MEV-Protect/Flashbots RPC toggle for live tx.
+
+Add peg-arb preset for stablecoins (DAI/USDC/USDT) with tiny spread targeting.
+
+Deliverables: Working repo on Replit with scripts runnable:
+
+pnpm i
+
+cp .env.example .env (fill values)
+
+pnpm dev (dashboard + paper bot)
+
+pnpm worker (live when MODE=live)
+
+Now generate the project and code per above, with clear README setup steps.
